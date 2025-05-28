@@ -1,0 +1,7 @@
+names:
+- helmet
+- no_helmet
+nc: 2
+test: C:/VsyaHuinyaPokaChto/ProjectsVSCode/NIR/helmet_yolo_dataset/images/train
+train: C:/VsyaHuinyaPokaChto/ProjectsVSCode/NIR/helmet_yolo_dataset/images/val
+val: C:/VsyaHuinyaPokaChto/ProjectsVSCode/NIR/helmet_yolo_dataset/images/test
