@@ -11,7 +11,7 @@ def prepare_dataset(csv_path, images_dir, output_dir):
     os.makedirs(f"{output_dir}/images/val", exist_ok=True)
     os.makedirs(f"{output_dir}/labels/train", exist_ok=True)
     os.makedirs(f"{output_dir}/labels/val", exist_ok=True)
-    
+        
     # Читаем CSV файл
     df = pd.read_csv(csv_path)
     
