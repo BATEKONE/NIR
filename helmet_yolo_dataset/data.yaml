@@ -1,7 +1,8 @@
 names:
 - helmet
 - no_helmet
-nc: 2
+- motorcycle
+nc: 3
 test: D:/ProjectsWEB/NIR/helmet_yolo_dataset/images/train
 train: D:/ProjectsWEB/NIR/helmet_yolo_dataset/images/val
 val: D:/ProjectsWEB/NIR/helmet_yolo_dataset/images/test
