@@ -1,5 +1,5 @@
 import os
-from PIL import Image
+from PIL import Image, ImageDraw
 import torch
 from torch.utils.data import Dataset, DataLoader
 import torchvision.transforms as transforms
@@ -93,7 +93,7 @@ model.to(device)
 # ==== Обучение ====
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=1e-4)
-num_epochs = 10
+num_epochs = 30
 
 print("🚀 Начинаем обучение модели...")
 for epoch in range(num_epochs):
@@ -121,31 +121,81 @@ for epoch in range(num_epochs):
             outputs = model(inputs)
             val_acc += (outputs.argmax(1) == labels).sum().item()
 
-    print(f"[{epoch+1}/{num_epochs}] Loss: {running_loss:.4f}, Train Acc: {correct/len(train_dataset):.2f}, Val Acc: {val_acc/len(val_dataset):.2f}")
+    print(f"[{epoch+1}/{num_epochs}] Loss: {running_loss:.4f}, "
+          f"Train Acc: {correct/len(train_dataset):.2f}, Val Acc: {val_acc/len(val_dataset):.2f}")
 
 # ==== Сохраняем модель ====
 torch.save(model.state_dict(), "helmet_classifier.pth")
 print("✅ Модель сохранена как helmet_classifier.pth")
 
-# ==== Gradio-интерфейс ====
-def predict(image):
+# ==== Gradio-интерфейс с отрисовкой ====
+
+def predict(image_np):
     model.eval()
-    image = Image.fromarray(image).convert("RGB")
-    image = transform(image).unsqueeze(0).to(device)
-    with torch.no_grad():
-        outputs = model(image)
-        _, preds = torch.max(outputs, 1)
-    return "🟢 Шлем надет" if preds[0] == 0 else "🔴 Шлем не надет!"
+    image = Image.fromarray(image_np).convert("RGB")
+    w, h = image.size
+    image_draw = image.copy()
+    draw = ImageDraw.Draw(image_draw)
+
+    label_dir = "helmet_yolo_dataset/labels/val"
+    label_file = None
+
+    # Попытка найти подходящий label
+    image_name = None
+    for fname in os.listdir(label_dir):
+        possible_image = fname.replace(".txt", ".jpg")
+        if possible_image in os.listdir("helmet_yolo_dataset/images/val"):
+            image_name = possible_image
+            label_file = os.path.join(label_dir, fname)
+            break
+
+    if label_file is None:
+        return image_draw, "❌ Не найдена разметка YOLO для изображения"
+
+    results = []
+    with open(label_file, "r") as f:
+        lines = f.readlines()
+        for line in lines:
+            class_id, x_c, y_c, box_w, box_h = map(float, line.strip().split())
+
+            x_c *= w
+            y_c *= h
+            box_w *= w
+            box_h *= h
+            x1 = int(max(x_c - box_w / 2, 0))
+            y1 = int(max(y_c - box_h / 2, 0))
+            x2 = int(min(x_c + box_w / 2, w))
+            y2 = int(min(y_c + box_h / 2, h))
+
+            crop = image.crop((x1, y1, x2, y2))
+            crop_tensor = transform(crop).unsqueeze(0).to(device)
+
+            with torch.no_grad():
+                output = model(crop_tensor)
+                pred = output.argmax(1).item()
+
+            label_text = "🟢 Helmet" if pred == 0 else "🔴 No helmet"
+            color = "green" if pred == 0 else "red"
+            draw.rectangle([x1, y1, x2, y2], outline=color, width=3)
+            draw.text((x1, y1 - 10), label_text, fill=color)
+
+            results.append(label_text)
+
+    return image_draw, ", ".join(results) if results else "🤷 Нет объектов"
+
+# ==== Интерфейс Gradio ====
 
 with gr.Blocks() as demo:
-    gr.Markdown("# 🧠 Классификатор шлема на мотоциклисте (YOLO-crop)")
-    with gr.Row():
-        input_image = gr.Image(label="📷 Изображение", type="numpy")
-        output_label = gr.Label(label="🔍 Результат")
-    btn = gr.Button("Проверить")
-    btn.click(fn=predict, inputs=input_image, outputs=output_label)
+    gr.Markdown("# 🧠 Классификатор шлемов с визуализацией (YOLO + ResNet)")
 
-    # Автоматически подгружаем 5 изображений из validation
+    with gr.Row():
+        input_image = gr.Image(label="📷 Входное изображение", type="numpy")
+        output_image = gr.Image(label="🖼️ С результатом")
+        output_text = gr.Label(label="🔍 Объекты")
+
+    btn = gr.Button("Проверить")
+    btn.click(fn=predict, inputs=input_image, outputs=[output_image, output_text])
+
     example_dir = "helmet_yolo_dataset/images/val"
     examples = [
         os.path.join(example_dir, f)
